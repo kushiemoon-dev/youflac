@@ -1,0 +1,43 @@
+# Build outputs
+build/bin/
+*.exe
+*.app
+*.dmg
+youflac
+mkv-video
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/wailsjs/
+
+# Go
+*.test
+*.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp files
+*.tmp
+*.log
+
+# Test artifacts
+*_test.go.bak
+*.test
+
+# Config (local)
+.env
+.env.local
+
+# Dev tools
+*.instructions.md
+.ai/
