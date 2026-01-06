@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import * as App from '../../../wailsjs/go/main/App';
+import * as Api from '../../lib/api';
 
 interface HeaderProps {
   title: string;
@@ -10,7 +10,7 @@ export function Header({ title, subtitle }: HeaderProps) {
   const [version, setVersion] = useState('');
 
   useEffect(() => {
-    App.GetAppVersion().then(setVersion).catch(console.error);
+    Api.GetAppVersion().then(setVersion).catch(console.error);
   }, []);
 
   return (

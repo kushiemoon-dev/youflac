@@ -1,20 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
-import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime';
-import * as App from '../../wailsjs/go/main/App';
-import { backend } from '../../wailsjs/go/models';
-import type { QueueEvent } from '../types';
+import { EventsOn } from '../lib/websocket';
+import * as Api from '../lib/api';
+import type { QueueItem, QueueStats, QueueEvent } from '../lib/api';
+import { playSound } from './useSoundEffects';
 
 export function useQueue() {
-  const [items, setItems] = useState<backend.QueueItem[]>([]);
-  const [stats, setStats] = useState<backend.QueueStats | null>(null);
+  const [items, setItems] = useState<QueueItem[]>([]);
+  const [stats, setStats] = useState<QueueStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Fetch initial queue
   const fetchQueue = useCallback(async () => {
     try {
       const [queueItems, queueStats] = await Promise.all([
-        App.GetQueue(),
-        App.GetQueueStats()
+        Api.GetQueue(),
+        Api.GetQueueStats()
       ]);
       setItems(queueItems || []);
       setStats(queueStats);
@@ -25,7 +25,7 @@ export function useQueue() {
     }
   }, []);
 
-  // Listen for queue events
+  // Listen for queue events via WebSocket
   useEffect(() => {
     fetchQueue();
 
@@ -47,56 +47,64 @@ export function useQueue() {
           setItems(prev => prev.filter(item => item.id !== event.itemId));
           break;
         case 'completed':
+          if (event.item) {
+            setItems(prev =>
+              prev.map(item => item.id === event.itemId ? event.item! : item)
+            );
+          }
+          playSound('complete');
+          break;
         case 'error':
           if (event.item) {
             setItems(prev =>
               prev.map(item => item.id === event.itemId ? event.item! : item)
             );
           }
+          playSound('error');
           break;
       }
       // Refresh stats on any event
-      App.GetQueueStats().then(setStats).catch(console.error);
+      Api.GetQueueStats().then(setStats).catch(console.error);
     };
 
-    EventsOn('queue:event', handleEvent);
-    return () => EventsOff('queue:event');
+    const unsubscribe = EventsOn('queue:event', handleEvent);
+    return () => unsubscribe();
   }, [fetchQueue]);
 
   // Actions
   const addToQueue = useCallback(async (videoUrl: string, spotifyUrl?: string) => {
-    const request = new backend.DownloadRequest({
+    const request: Api.DownloadRequest = {
       videoUrl,
       spotifyUrl
-    });
-    return App.AddToQueue(request);
+    };
+    return Api.AddToQueue(request);
   }, []);
 
   const removeFromQueue = useCallback(async (id: string) => {
-    await App.RemoveFromQueue(id);
+    await Api.RemoveFromQueue(id);
   }, []);
 
   const cancelItem = useCallback(async (id: string) => {
-    await App.CancelQueueItem(id);
+    await Api.CancelQueueItem(id);
   }, []);
 
   const clearCompleted = useCallback(async () => {
-    await App.ClearCompleted();
+    await Api.ClearCompleted();
     fetchQueue();
   }, [fetchQueue]);
 
   const retryFailed = useCallback(async () => {
-    await App.RetryFailed();
+    await Api.RetryFailed();
     fetchQueue();
   }, [fetchQueue]);
 
   const clearAll = useCallback(async () => {
-    await App.ClearQueue();
+    await Api.ClearQueue();
     fetchQueue();
   }, [fetchQueue]);
 
   const moveItem = useCallback(async (id: string, newIndex: number) => {
-    await App.MoveQueueItem(id, newIndex);
+    await Api.MoveQueueItem(id, newIndex);
     fetchQueue();
   }, [fetchQueue]);
 

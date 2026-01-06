@@ -1,8 +1,8 @@
-// Re-export types from Wails bindings
-export { backend, main } from '../../wailsjs/go/models';
+// Re-export types from lib/api
+export * from '../lib/api';
 
 // Page navigation
-export type Page = 'home' | 'settings' | 'files' | 'terminal' | 'about';
+export type Page = 'home' | 'history' | 'settings' | 'files' | 'terminal' | 'about';
 
 // Queue status mapping
 export type QueueStatus =
@@ -18,14 +18,4 @@ export type QueueStatus =
 
 // Theme types
 export type Theme = 'dark' | 'light' | 'system';
-export type AccentColor = 'pink' | 'blue' | 'green' | 'purple' | 'orange';
-
-// Queue event from Wails
-export interface QueueEvent {
-  type: 'added' | 'updated' | 'removed' | 'completed' | 'error';
-  itemId: string;
-  item?: import('../../wailsjs/go/models').backend.QueueItem;
-  progress?: number;
-  status?: QueueStatus;
-  error?: string;
-}
+export type AccentColor = 'pink' | 'blue' | 'green' | 'purple' | 'orange' | 'teal' | 'red' | 'yellow';

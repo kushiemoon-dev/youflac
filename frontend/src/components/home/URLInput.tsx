@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
-import * as App from '../../../wailsjs/go/main/App';
-import { backend } from '../../../wailsjs/go/models';
+import * as Api from '../../lib/api';
+import type { VideoInfo } from '../../lib/api';
 
 // Icons
 const LinkIcon = () => (
@@ -48,7 +48,7 @@ export function URLInput({ onAdd }: URLInputProps) {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [preview, setPreview] = useState<backend.VideoInfo | null>(null);
+  const [preview, setPreview] = useState<VideoInfo | null>(null);
 
   const handleSubmit = useCallback(async () => {
     if (!url.trim()) return;
@@ -69,7 +69,7 @@ export function URLInput({ onAdd }: URLInputProps) {
         setPreview(null);
       } else {
         // For single videos, try to get video info first for preview
-        const videoInfo = await App.GetVideoInfo(trimmedUrl);
+        const videoInfo = await Api.GetVideoInfo(trimmedUrl);
         if (videoInfo) {
           setPreview(videoInfo);
           // Auto-add to queue

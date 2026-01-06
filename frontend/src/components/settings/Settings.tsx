@@ -2,9 +2,12 @@ import { useState, useEffect } from 'react';
 import { Header } from '../layout/Header';
 import { Toggle } from '../ui/Toggle';
 import { Dropdown } from '../ui/Dropdown';
+import { ColorPicker } from '../ui/ColorPicker';
 import { useSettings } from '../../hooks/useSettings';
-import * as App from '../../../wailsjs/go/main/App';
-import { BrowserOpenURL } from '../../../wailsjs/runtime/runtime';
+import { applyAccentColor } from '../../hooks/useAccentColor';
+import { setSoundEnabled } from '../../hooks/useSoundEffects';
+import { AccentColor } from '../../types';
+import * as Api from '../../lib/api';
 
 const FolderIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -59,13 +62,19 @@ const cookiesBrowserOptions = [
   { value: 'edge', label: 'Edge', description: 'Use Edge cookies' },
 ];
 
+const lyricsEmbedModeOptions = [
+  { value: 'lrc', label: 'LRC File', description: 'Save as .lrc file alongside media' },
+  { value: 'embed', label: 'Embed', description: 'Embed lyrics in media file' },
+  { value: 'both', label: 'Both', description: 'LRC file + embedded' },
+];
+
 export function Settings() {
   const { config, loading, saving, saveConfig, updateField } = useSettings();
   const [defaultPath, setDefaultPath] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
 
   useEffect(() => {
-    App.GetDefaultOutputDirectory().then(setDefaultPath).catch(console.error);
+    Api.GetDefaultOutputDirectory().then(setDefaultPath).catch(console.error);
   }, []);
 
   if (loading || !config) {
@@ -211,6 +220,20 @@ export function Settings() {
               />
             </div>
 
+            {/* Accent Color */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                Accent Color
+              </label>
+              <ColorPicker
+                value={(config.accentColor || 'pink') as AccentColor}
+                onChange={(color) => {
+                  handleChange('accentColor', color);
+                  applyAccentColor(color);
+                }}
+              />
+            </div>
+
             {/* Audio Source Priority */}
             <div className="space-y-2">
               <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
@@ -262,6 +285,61 @@ export function Settings() {
                   checked={config.embedCoverArt}
                   onChange={(v) => handleChange('embedCoverArt', v)}
                 />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                    Sound Effects
+                  </p>
+                  <p className="text-sm" style={{ color: 'var(--color-text-tertiary)' }}>
+                    Play sounds on download complete, error, etc.
+                  </p>
+                </div>
+                <Toggle
+                  checked={config.soundEffectsEnabled ?? true}
+                  onChange={(v) => {
+                    handleChange('soundEffectsEnabled', v);
+                    setSoundEnabled(v);
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Lyrics Section */}
+            <div className="pt-4 border-t" style={{ borderColor: 'var(--color-border-subtle)' }}>
+              <h4 className="text-sm font-medium mb-4" style={{ color: 'var(--color-text-secondary)' }}>
+                Lyrics
+              </h4>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                      Fetch Lyrics
+                    </p>
+                    <p className="text-sm" style={{ color: 'var(--color-text-tertiary)' }}>
+                      Automatically fetch lyrics from LRCLIB
+                    </p>
+                  </div>
+                  <Toggle
+                    checked={config.lyricsEnabled ?? false}
+                    onChange={(v) => handleChange('lyricsEnabled', v)}
+                  />
+                </div>
+
+                {config.lyricsEnabled && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                      Lyrics Format
+                    </label>
+                    <Dropdown
+                      value={config.lyricsEmbedMode || 'lrc'}
+                      options={lyricsEmbedModeOptions}
+                      onChange={(v) => handleChange('lyricsEmbedMode', v)}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -1,4 +1,4 @@
-import { backend } from '../../../wailsjs/go/models';
+import type { QueueItem as QueueItemType, QueueStats } from '../../lib/api';
 import { QueueItem } from './QueueItem';
 
 // Icons
@@ -24,8 +24,8 @@ const RefreshIcon = () => (
 );
 
 interface QueueListProps {
-  items: backend.QueueItem[];
-  stats: backend.QueueStats | null;
+  items: QueueItemType[];
+  stats: QueueStats | null;
   onCancel: (id: string) => void;
   onRemove: (id: string) => void;
   onClearCompleted: () => void;

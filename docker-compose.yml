@@ -1,0 +1,40 @@
+services:
+  youflac:
+    image: youflac:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: youflac
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:8080"
+    volumes:
+      - ${CONFIG_PATH:-./config}:/config
+      - ${DOWNLOADS_PATH:-./downloads}:/downloads
+    environment:
+      - PORT=8080
+      - OUTPUT_DIR=/downloads
+      - CONFIG_DIR=/config
+      # Download settings
+      - VIDEO_QUALITY=${VIDEO_QUALITY:-best}
+      - CONCURRENT_DOWNLOADS=${CONCURRENT_DOWNLOADS:-2}
+      - NAMING_TEMPLATE=${NAMING_TEMPLATE:-jellyfin}
+      - GENERATE_NFO=${GENERATE_NFO:-true}
+      - EMBED_COVER_ART=${EMBED_COVER_ART:-true}
+      # Lyrics
+      - LYRICS_ENABLED=${LYRICS_ENABLED:-false}
+      - LYRICS_EMBED_MODE=${LYRICS_EMBED_MODE:-lrc}
+      # Audio source priority (comma-separated)
+      - AUDIO_SOURCE_PRIORITY=${AUDIO_SOURCE_PRIORITY:-tidal,qobuz,amazon}
+      # YouTube anti-bot (optional)
+      - COOKIES_BROWSER=${COOKIES_BROWSER:-}
+      # UI settings
+      - THEME=${THEME:-dark}
+      - ACCENT_COLOR=${ACCENT_COLOR:-pink}
+      - SOUND_EFFECTS_ENABLED=${SOUND_EFFECTS_ENABLED:-true}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

@@ -4,6 +4,7 @@ build/bin/
 *.app
 *.dmg
 youflac
+youflac-server
 mkv-video
 
 # Frontend

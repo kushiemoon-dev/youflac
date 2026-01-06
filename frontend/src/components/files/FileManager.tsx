@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Header } from '../layout/Header';
-import { ListFiles, BrowseDirectory, OpenFile, OpenDirectory, GetDefaultOutputDirectory, GetImageAsDataURL, GetPlaylistFolders, ReorganizePlaylist, FlattenPlaylistFolder } from '../../../wailsjs/go/main/App';
+import * as Api from '../../lib/api';
+import { AudioAnalyzer } from '../analyzer/AudioAnalyzer';
 
 // Icons
 const FolderIcon = () => (
@@ -82,6 +83,12 @@ const FileAudioIcon = () => (
   </svg>
 );
 
+const AnalyzeIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2 12h2M6 8v8M10 5v14M14 8v8M18 10v4M22 12h0" />
+  </svg>
+);
+
 interface FileInfo {
   name: string;
   path: string;
@@ -108,12 +115,13 @@ export function FileManager() {
   const [playlistFolders, setPlaylistFolders] = useState<string[]>([]);
   const [reorganizing, setReorganizing] = useState<string | null>(null);
   const [flattening, setFlattening] = useState<string | null>(null);
+  const [analyzerFile, setAnalyzerFile] = useState<FileInfo | null>(null);
 
   const loadFiles = async (directory?: string) => {
     setLoading(true);
     try {
       // Load all file types to get accurate counts
-      const result = await ListFiles(directory || path, "all");
+      const result = await Api.ListFiles(directory || path, "all");
       setFiles(result || []);
 
       // Load poster images for videos
@@ -127,7 +135,7 @@ export function FileManager() {
         const poster = covers.find(c => c.path === posterPath);
         if (poster) {
           try {
-            const dataUrl = await GetImageAsDataURL(poster.path);
+            const dataUrl = await Api.GetImageAsDataURL(poster.path);
             newCache[video.path] = dataUrl;
           } catch (e) {
             console.error('Failed to load poster:', e);
@@ -144,36 +152,30 @@ export function FileManager() {
   };
 
   const handleBrowse = async () => {
-    try {
-      const dir = await BrowseDirectory();
-      if (dir) {
-        setPath(dir);
-        loadFiles(dir);
-      }
-    } catch (err) {
-      console.error('Failed to browse:', err);
+    // In web mode, prompt user for path input (no native file dialog)
+    const dir = prompt('Enter directory path:');
+    if (dir) {
+      setPath(dir);
+      loadFiles(dir);
     }
   };
 
   const handleOpenFile = async (filePath: string) => {
-    try {
-      await OpenFile(filePath);
-    } catch (err) {
-      console.error('Failed to open file:', err);
-    }
+    // In web mode, this would typically trigger a download
+    // For now, just log that this action is not available in web mode
+    console.log('Open file not available in web mode:', filePath);
+    alert('File opening is not available in web mode. Use the Files page to download files.');
   };
 
   const handleOpenDirectory = async (filePath: string) => {
-    try {
-      await OpenDirectory(filePath);
-    } catch (err) {
-      console.error('Failed to open directory:', err);
-    }
+    // In web mode, this is not available
+    console.log('Open directory not available in web mode:', filePath);
+    alert('Opening folders is not available in web mode.');
   };
 
   const loadPlaylistFolders = async () => {
     try {
-      const folders = await GetPlaylistFolders();
+      const folders = await Api.GetPlaylistFolders();
       setPlaylistFolders(folders || []);
     } catch (err) {
       console.error('Failed to load playlist folders:', err);
@@ -184,7 +186,7 @@ export function FileManager() {
   const handleReorganizePlaylist = async (folder: string) => {
     setReorganizing(folder);
     try {
-      const result = await ReorganizePlaylist(folder);
+      const result = await Api.ReorganizePlaylist(folder);
       if (result.renamed > 0) {
         // Reload files to show new names
         loadFiles();
@@ -201,7 +203,7 @@ export function FileManager() {
   const handleFlattenPlaylist = async (folder: string) => {
     setFlattening(folder);
     try {
-      const result = await FlattenPlaylistFolder(folder);
+      const result = await Api.FlattenPlaylistFolder(folder);
       if (result.moved > 0) {
         // Reload files to show new structure
         loadFiles();
@@ -219,7 +221,7 @@ export function FileManager() {
   useEffect(() => {
     const init = async () => {
       try {
-        const defaultDir = await GetDefaultOutputDirectory();
+        const defaultDir = await Api.GetDefaultOutputDirectory();
         setPath(defaultDir);
         loadFiles(defaultDir);
         loadPlaylistFolders();
@@ -432,6 +434,18 @@ export function FileManager() {
                 </div>
 
                 <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {(file.type === 'audio' || file.type === 'video') && (
+                    <button
+                      className="btn-icon"
+                      title="Analyze quality"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAnalyzerFile(file);
+                      }}
+                    >
+                      <AnalyzeIcon />
+                    </button>
+                  )}
                   <button
                     className="btn-icon"
                     title="Play/Open"
@@ -452,6 +466,15 @@ export function FileManager() {
           </div>
         )}
       </div>
+
+      {/* Audio Analyzer Modal */}
+      {analyzerFile && (
+        <AudioAnalyzer
+          filePath={analyzerFile.path}
+          fileName={analyzerFile.name}
+          onClose={() => setAnalyzerFile(null)}
+        />
+      )}
     </div>
   );
 }

@@ -1,0 +1,1 @@
+export { AudioAnalyzer } from './AudioAnalyzer';
