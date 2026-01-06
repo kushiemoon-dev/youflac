@@ -48,6 +48,7 @@ type QueueItem struct {
 	OutputPath   string      `json:"outputPath,omitempty"`
 	VideoPath    string      `json:"videoPath,omitempty"`   // Temp video file
 	AudioPath    string      `json:"audioPath,omitempty"`   // Temp audio file
+	FileSize     int64       `json:"fileSize,omitempty"`    // Output file size
 	CreatedAt    time.Time   `json:"createdAt"`
 	StartedAt    time.Time   `json:"startedAt,omitempty"`
 	CompletedAt  time.Time   `json:"completedAt,omitempty"`
@@ -56,6 +57,7 @@ type QueueItem struct {
 	MatchScore      int    `json:"matchScore,omitempty"`
 	MatchConfidence string `json:"matchConfidence,omitempty"`
 	AudioSource     string `json:"audioSource,omitempty"` // tidal, qobuz, amazon, etc.
+	Quality         string `json:"quality,omitempty"` // FLAC quality (e.g. "24-bit/96kHz")
 
 	// Audio-only fallback (video unavailable)
 	AudioOnly bool `json:"audioOnly,omitempty"`
@@ -102,6 +104,9 @@ type Queue struct {
 
 	// File index for duplicate detection
 	fileIndex *FileIndex
+
+	// History for tracking completed downloads
+	history *History
 }
 
 // NewQueue creates a new download queue
@@ -135,6 +140,13 @@ func (q *Queue) SetFileIndex(fi *FileIndex) {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 	q.fileIndex = fi
+}
+
+// SetHistory sets the history manager for recording completed downloads
+func (q *Queue) SetHistory(h *History) {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+	q.history = h
 }
 
 // emit sends an event to the progress callback
@@ -314,7 +326,19 @@ func (q *Queue) SetItemError(id string, err error) {
 		item.Status = StatusError
 		item.Error = err.Error()
 		item.Stage = "Error"
+		item.CompletedAt = time.Now()
 	})
+
+	// Save to history as failed
+	q.mutex.RLock()
+	history := q.history
+	q.mutex.RUnlock()
+	if history != nil {
+		item := q.GetItem(id)
+		if item != nil {
+			history.AddFromQueueItem(item, "error", err.Error())
+		}
+	}
 
 	q.emit(QueueEvent{
 		Type:   "error",
@@ -1041,6 +1065,69 @@ func (q *Queue) processItem(id string) {
 	}
 
 	// ==========================================================================
+	// Stage 4.5: Fetch and Embed Lyrics (if enabled)
+	// ==========================================================================
+	select {
+	case <-itemCtx.Done():
+		return
+	default:
+	}
+
+	if config.LyricsEnabled && videoInfo.Artist != "" && videoInfo.Title != "" {
+		q.UpdateStatus(id, StatusOrganizing, 85, "Fetching lyrics...")
+
+		lyrics, lyricsErr := FetchLyrics(videoInfo.Artist, videoInfo.Title)
+		if lyricsErr == nil && lyrics != nil {
+			embedMode := LyricsEmbedMode(config.LyricsEmbedMode)
+			if embedMode == "" {
+				embedMode = LyricsEmbedLRC // Default to LRC file
+			}
+
+			switch embedMode {
+			case LyricsEmbedFile:
+				if err := EmbedLyricsInFile(result.OutputPath, lyrics); err != nil {
+					fmt.Printf("[Queue] Warning: failed to embed lyrics: %v\n", err)
+				} else {
+					fmt.Printf("[Queue] Lyrics embedded in file\n")
+				}
+			case LyricsEmbedLRC:
+				if lyrics.HasSync {
+					if lrcPath, err := SaveLRCFile(lyrics, result.OutputPath); err != nil {
+						fmt.Printf("[Queue] Warning: failed to save LRC file: %v\n", err)
+					} else {
+						fmt.Printf("[Queue] LRC file saved: %s\n", lrcPath)
+					}
+				} else if lyrics.PlainText != "" {
+					if txtPath, err := SavePlainLyricsFile(lyrics, result.OutputPath); err != nil {
+						fmt.Printf("[Queue] Warning: failed to save lyrics file: %v\n", err)
+					} else {
+						fmt.Printf("[Queue] Lyrics file saved: %s\n", txtPath)
+					}
+				}
+			case LyricsEmbedBoth:
+				// Save LRC/TXT file
+				if lyrics.HasSync {
+					if lrcPath, err := SaveLRCFile(lyrics, result.OutputPath); err == nil {
+						fmt.Printf("[Queue] LRC file saved: %s\n", lrcPath)
+					}
+				} else if lyrics.PlainText != "" {
+					if txtPath, err := SavePlainLyricsFile(lyrics, result.OutputPath); err == nil {
+						fmt.Printf("[Queue] Lyrics file saved: %s\n", txtPath)
+					}
+				}
+				// Also embed in file
+				if err := EmbedLyricsInFile(result.OutputPath, lyrics); err != nil {
+					fmt.Printf("[Queue] Warning: failed to embed lyrics: %v\n", err)
+				} else {
+					fmt.Printf("[Queue] Lyrics embedded in file\n")
+				}
+			}
+		} else if lyricsErr != nil {
+			fmt.Printf("[Queue] Lyrics not found: %v\n", lyricsErr)
+		}
+	}
+
+	// ==========================================================================
 	// Stage 5: Organize and Generate NFO
 	// ==========================================================================
 	select {
@@ -1100,13 +1187,31 @@ func (q *Queue) processItem(id string) {
 		go fi.Save()
 	}
 
+	// Get file size for history
+	var fileSize int64
+	if stat, err := os.Stat(result.OutputPath); err == nil {
+		fileSize = stat.Size()
+	}
+
 	q.updateItem(id, func(item *QueueItem) {
 		item.Status = StatusComplete
 		item.Progress = 100
 		item.Stage = "Complete"
 		item.OutputPath = result.OutputPath
+		item.FileSize = fileSize
 		item.CompletedAt = time.Now()
 	})
+
+	// Save to history
+	q.mutex.RLock()
+	history := q.history
+	q.mutex.RUnlock()
+	if history != nil {
+		item = q.GetItem(id)
+		if item != nil {
+			history.AddFromQueueItem(item, "complete", "")
+		}
+	}
 
 	q.emit(QueueEvent{
 		Type:     "completed",

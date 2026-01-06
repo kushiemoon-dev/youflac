@@ -20,6 +20,7 @@ type App struct {
 	queue     *backend.Queue
 	config    *backend.Config
 	fileIndex *backend.FileIndex
+	history   *backend.History
 }
 
 // NewApp creates a new App application struct
@@ -86,6 +87,12 @@ func (a *App) startup(ctx context.Context) {
 
 	// Pass file index to queue for skip detection
 	a.queue.SetFileIndex(a.fileIndex)
+
+	// Initialize history
+	a.history = backend.NewHistory()
+
+	// Pass history to queue for recording completed downloads
+	a.queue.SetHistory(a.history)
 
 	// Start processing queue
 	a.queue.StartProcessing()
@@ -185,7 +192,7 @@ func (a *App) AddPlaylistToQueue(playlistURL string, quality string) ([]string, 
 		return nil, err
 	}
 
-	var ids []string
+	ids := []string{}
 	for _, video := range playlistInfo.Videos {
 		request := backend.DownloadRequest{
 			VideoURL: video.URL,
@@ -310,7 +317,7 @@ func (a *App) ListFiles(directory string, fileType string) ([]FileInfo, error) {
 		}
 	}
 
-	var files []FileInfo
+	files := []FileInfo{}
 	var extensions []string
 
 	switch fileType {
@@ -530,7 +537,7 @@ func (a *App) GetPlaylistFolders() ([]string, error) {
 		outputDir = backend.GetDefaultOutputDirectory()
 	}
 
-	var folders []string
+	folders := []string{}
 
 	entries, err := os.ReadDir(outputDir)
 	if err != nil {
@@ -634,11 +641,159 @@ func (a *App) FlattenPlaylistFolder(playlistFolder string) (*FlattenPlaylistResu
 }
 
 // =============================================================================
+// History
+// =============================================================================
+
+// GetHistory returns all history entries
+func (a *App) GetHistory() []backend.HistoryEntry {
+	return a.history.GetAll()
+}
+
+// SearchHistory searches history by title or artist
+func (a *App) SearchHistory(query string) []backend.HistoryEntry {
+	return a.history.Search(query)
+}
+
+// FilterHistoryBySource returns history filtered by audio source
+func (a *App) FilterHistoryBySource(source string) []backend.HistoryEntry {
+	return a.history.FilterBySource(source)
+}
+
+// FilterHistoryByStatus returns history filtered by status
+func (a *App) FilterHistoryByStatus(status string) []backend.HistoryEntry {
+	return a.history.FilterByStatus(status)
+}
+
+// GetHistoryStats returns history statistics
+func (a *App) GetHistoryStats() backend.HistoryStats {
+	return a.history.GetStats()
+}
+
+// DeleteHistoryEntry removes an entry from history
+func (a *App) DeleteHistoryEntry(id string) error {
+	return a.history.Delete(id)
+}
+
+// ClearHistory removes all history entries
+func (a *App) ClearHistory() error {
+	return a.history.Clear()
+}
+
+// RedownloadFromHistory adds a history item back to the queue for re-download
+func (a *App) RedownloadFromHistory(id string) (string, error) {
+	entry := a.history.GetByID(id)
+	if entry == nil {
+		return "", fmt.Errorf("history entry not found: %s", id)
+	}
+
+	request := backend.DownloadRequest{
+		VideoURL: entry.VideoURL,
+	}
+
+	return a.queue.AddToQueue(request)
+}
+
+// =============================================================================
+// Audio Analyzer
+// =============================================================================
+
+// AnalyzeAudio performs quality analysis on an audio file
+func (a *App) AnalyzeAudio(filePath string) (*backend.AudioAnalysis, error) {
+	return backend.AnalyzeAudio(filePath)
+}
+
+// GenerateSpectrogram creates a spectrogram image for an audio file
+// Returns the path to the generated PNG file
+func (a *App) GenerateSpectrogram(inputPath string) (string, error) {
+	// Generate spectrogram in temp directory
+	tempDir := filepath.Join(os.TempDir(), "youflac", "spectrograms")
+	if err := os.MkdirAll(tempDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create temp directory: %w", err)
+	}
+
+	// Use hash of input path for unique filename
+	fileName := fmt.Sprintf("spec_%x.png", hash(inputPath))
+	outputPath := filepath.Join(tempDir, fileName)
+
+	if err := backend.GenerateSpectrogram(inputPath, outputPath); err != nil {
+		return "", err
+	}
+
+	return outputPath, nil
+}
+
+// GenerateWaveform creates a waveform image for an audio file
+func (a *App) GenerateWaveform(inputPath string) (string, error) {
+	tempDir := filepath.Join(os.TempDir(), "youflac", "waveforms")
+	if err := os.MkdirAll(tempDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create temp directory: %w", err)
+	}
+
+	fileName := fmt.Sprintf("wave_%x.png", hash(inputPath))
+	outputPath := filepath.Join(tempDir, fileName)
+
+	if err := backend.GenerateWaveform(inputPath, outputPath); err != nil {
+		return "", err
+	}
+
+	return outputPath, nil
+}
+
+// =============================================================================
+// Lyrics
+// =============================================================================
+
+// FetchLyrics fetches lyrics for a track from LRCLIB
+func (a *App) FetchLyrics(artist, title string) (*backend.LyricsResult, error) {
+	return backend.FetchLyrics(artist, title)
+}
+
+// FetchLyricsWithAlbum fetches lyrics with album context for better matching
+func (a *App) FetchLyricsWithAlbum(artist, title, album string) (*backend.LyricsResult, error) {
+	return backend.FetchLyricsWithAlbum(artist, title, album)
+}
+
+// EmbedLyrics embeds lyrics into a media file
+func (a *App) EmbedLyrics(mediaPath string, lyrics *backend.LyricsResult) error {
+	return backend.EmbedLyricsInFile(mediaPath, lyrics)
+}
+
+// SaveLRCFile saves synced lyrics to a .lrc file alongside the media file
+func (a *App) SaveLRCFile(mediaPath string, lyrics *backend.LyricsResult) (string, error) {
+	return backend.SaveLRCFile(lyrics, mediaPath)
+}
+
+// FetchAndEmbedLyrics fetches and embeds lyrics in one operation
+func (a *App) FetchAndEmbedLyrics(mediaPath, artist, title, mode string) error {
+	embedMode := backend.LyricsEmbedMode(mode)
+	return backend.FetchAndEmbedLyrics(mediaPath, artist, title, embedMode)
+}
+
+// HasLyrics checks if a media file has embedded lyrics
+func (a *App) HasLyrics(mediaPath string) (bool, error) {
+	return backend.HasLyrics(mediaPath)
+}
+
+// ExtractLyrics extracts embedded lyrics from a media file
+func (a *App) ExtractLyrics(mediaPath string) (*backend.LyricsResult, error) {
+	return backend.ExtractLyrics(mediaPath)
+}
+
+// =============================================================================
 // System
 // =============================================================================
 
 // GetAppVersion returns application version
 func (a *App) GetAppVersion() string {
-	return "1.0.0"
+	return "1.0.1"
+}
+
+// hash generates a simple hash of a string for filename purposes
+func hash(s string) uint32 {
+	h := uint32(0)
+	for _, c := range s {
+		h = h*31 + uint32(c)
+	}
+	return h
 }
 

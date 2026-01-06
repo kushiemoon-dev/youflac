@@ -1,4 +1,4 @@
-import { backend } from '../../../wailsjs/go/models';
+import type { QueueItem as QueueItemType } from '../../lib/api';
 import { ProgressBar } from './ProgressBar';
 import type { QueueStatus } from '../../types';
 
@@ -32,7 +32,7 @@ const RefreshIcon = () => (
 );
 
 interface QueueItemProps {
-  item: backend.QueueItem;
+  item: QueueItemType;
   onCancel: (id: string) => void;
   onRemove: (id: string) => void;
   onRetry?: (id: string) => void;

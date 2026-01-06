@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Header } from './layout/Header';
-import * as App from '../../wailsjs/go/main/App';
-import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
+import * as Api from '../lib/api';
 
 const GithubIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -19,7 +18,7 @@ export function About() {
   const [version, setVersion] = useState('');
 
   useEffect(() => {
-    App.GetAppVersion().then(setVersion).catch(console.error);
+    Api.GetAppVersion().then(setVersion).catch(console.error);
   }, []);
 
   return (
@@ -94,14 +93,14 @@ export function About() {
           <div className="flex justify-center gap-4">
             <button
               className="btn-secondary flex items-center gap-2"
-              onClick={() => BrowserOpenURL('https://github.com/kushie/youflac')}
+              onClick={() => window.open('https://github.com/kushie/youflac', '_blank')}
             >
               <GithubIcon />
               GitHub
             </button>
             <button
               className="btn-primary flex items-center gap-2"
-              onClick={() => BrowserOpenURL('https://ko-fi.com/username')}
+              onClick={() => window.open('https://ko-fi.com/username', '_blank')}
             >
               <HeartIcon />
               Support
