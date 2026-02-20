@@ -33,32 +33,55 @@
 
 ---
 
-## Download
+## Install
 
-**[⬇️ Download Latest Release](https://github.com/kushiemoon-dev/youflac/releases)**
-
----
-
-## Docker
-
-Run YouFLAC as a web application with Docker:
+### Docker
 
 ```bash
-# Quick start
 docker run -d \
   --name youflac \
   -p 8080:8080 \
   -v ./config:/config \
   -v ./downloads:/downloads \
-  youflac:latest
+  ghcr.io/kushiemoon-dev/youflac:latest
+```
 
-# Or with docker-compose
+Access the web UI at `http://localhost:8080`
+
+Or with docker-compose:
+
+```bash
 git clone https://github.com/kushiemoon-dev/youflac.git
 cd youflac
 docker compose up -d
 ```
 
+### Native Binaries
+
+**[⬇️ Download Latest Release](https://github.com/kushiemoon-dev/youflac/releases)**
+
+| Platform | Archive |
+|----------|---------|
+| Linux (x86_64) | `youflac-server-linux-amd64.tar.gz` |
+| Linux (ARM64) | `youflac-server-linux-arm64.tar.gz` |
+| macOS (Apple Silicon) | `youflac-server-darwin-arm64.tar.gz` |
+| Windows (x86_64) | `youflac-server-windows-amd64.zip` |
+
+```bash
+# Linux / macOS
+tar -xzf youflac-server-linux-amd64.tar.gz
+cd youflac-server-linux-amd64
+./youflac-server
+```
+
+```powershell
+# Windows — extract the zip, then:
+.\youflac-server.exe
+```
+
 Access the web UI at `http://localhost:8080`
+
+> **Note:** Native binaries require FFmpeg and yt-dlp in PATH. The Docker image includes both.
 
 ### Environment Variables
 
@@ -112,7 +135,7 @@ brew install ffmpeg yt-dlp
 choco install ffmpeg yt-dlp
 ```
 
-> **Note:** Docker image includes FFmpeg and yt-dlp — no manual installation needed.
+> **Note:** Only needed for native binaries — the Docker image includes FFmpeg and yt-dlp.
 
 ---
 
