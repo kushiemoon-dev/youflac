@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -606,7 +607,7 @@ func FetchAndEmbedLyrics(mediaPath, artist, title string, mode LyricsEmbedMode) 
 		if lyrics.HasSync {
 			if _, err := SaveLRCFile(lyrics, mediaPath); err != nil {
 				// Non-fatal, continue with embedding
-				fmt.Printf("Warning: failed to save LRC file: %v\n", err)
+				slog.Warn("failed to save LRC file", "err", err)
 			}
 		}
 

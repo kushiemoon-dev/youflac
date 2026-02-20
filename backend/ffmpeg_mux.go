@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -357,7 +358,7 @@ func CreateFLACWithMetadata(audioPath, outputPath string, metadata *Metadata, co
 
 	args = append(args, outputPath)
 
-	fmt.Printf("[FFmpeg] Creating FLAC: %s\n", strings.Join(args, " "))
+	slog.Debug("creating FLAC", "args", strings.Join(args, " "))
 
 	cmd := exec.Command(ffmpegPath, args...)
 	var stderr bytes.Buffer

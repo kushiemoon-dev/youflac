@@ -21,6 +21,9 @@ func main() {
 		config = backend.GetDefaultConfig()
 	}
 
+	// Initialise structured logger (LOG_LEVEL env var overrides config)
+	backend.InitLogger(config.LogLevel)
+
 	// Ensure output directory exists
 	outputDir := config.OutputDirectory
 	if outputDir == "" {

@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -180,7 +181,7 @@ func (q *Queue) processItem(id string) {
 					Progress: 100,
 					Status:   StatusComplete,
 				})
-				fmt.Printf("[Queue] Skipped (already exists): %s\n", existingFile.Path)
+				slog.Info("skipped, already exists", "path", existingFile.Path)
 				return
 			}
 
@@ -211,11 +212,11 @@ func (q *Queue) processItem(id string) {
 					Progress: 100,
 					Status:   StatusComplete,
 				})
-				fmt.Printf("[Queue] Copied from existing: %s -> %s\n", existingFile.Path, targetPath)
+				slog.Info("copied from existing", "src", existingFile.Path, "dst", targetPath)
 				return
 			}
 			// If copy fails, continue with normal download
-			fmt.Printf("[Queue] Copy failed, proceeding with download\n")
+			slog.Warn("copy failed, proceeding with download")
 		}
 	}
 
@@ -237,7 +238,7 @@ func (q *Queue) processItem(id string) {
 	videoPath, err = DownloadVideo(videoID, config.VideoQuality, tempDir, config.CookiesBrowser)
 	if err != nil {
 		// Don't fail immediately - try audio-only fallback
-		fmt.Printf("[Queue] Video download failed: %v, trying audio-only fallback\n", err)
+		slog.Warn("video download failed, trying audio-only fallback", "err", err)
 		q.UpdateStatus(id, StatusDownloadingAudio, 40, "Video unavailable, downloading audio only...")
 		audioOnly = true
 		videoPath = ""
@@ -247,7 +248,7 @@ func (q *Queue) processItem(id string) {
 		})
 	} else {
 		q.UpdateStatus(id, StatusDownloadingVideo, 40, "Video downloaded")
-		fmt.Printf("[Queue] Video downloaded: %s\n", videoPath)
+		slog.Debug("video downloaded", "path", videoPath)
 
 		q.updateItem(id, func(item *QueueItem) {
 			item.VideoPath = videoPath
@@ -285,16 +286,16 @@ func (q *Queue) processItem(id string) {
 	// Get audio links via songlink
 	if item.SpotifyURL != "" || item.VideoURL != "" {
 		q.UpdateStatus(id, StatusDownloadingAudio, 45, "Resolving audio sources...")
-		fmt.Printf("[Queue] Resolving audio sources for: %s\n", item.VideoURL)
+		slog.Debug("resolving audio sources", "url", item.VideoURL)
 
 		sourceURL := item.VideoURL
 		if item.SpotifyURL != "" {
 			sourceURL = item.SpotifyURL
 		}
 
-		fmt.Printf("[Queue] Calling ResolveMusicURL: %s\n", sourceURL)
+		slog.Debug("calling ResolveMusicURL", "url", sourceURL)
 		links, err := ResolveMusicURL(sourceURL)
-		fmt.Printf("[Queue] ResolveMusicURL result: err=%v, links=%v\n", err, links != nil)
+		slog.Debug("ResolveMusicURL result", "err", err, "hasLinks", links != nil)
 		if err == nil && links != nil {
 			// Try each audio source in priority order
 			for _, source := range config.AudioSourcePriority {
@@ -320,7 +321,7 @@ func (q *Queue) processItem(id string) {
 					continue
 				}
 
-				fmt.Printf("[Queue] Trying %s: %s\n", source, downloadURL)
+				slog.Debug("trying audio source", "source", source, "url", downloadURL)
 				q.UpdateStatus(id, StatusDownloadingAudio, 50, fmt.Sprintf("Downloading from %s...", source))
 
 				// Service cascade for FLAC download
@@ -329,36 +330,36 @@ func (q *Queue) processItem(id string) {
 
 				// 1. Try TidalHifiService FIRST for Tidal URLs (vogel.qqdl.site - works!)
 				if source == "tidal" && tidalHifiService.IsAvailable() {
-					fmt.Printf("[Queue] Trying TidalHifi API for %s...\n", source)
+					slog.Debug("trying TidalHifi API", "source", source)
 					q.UpdateStatus(id, StatusDownloadingAudio, 51, "Downloading FLAC from Tidal...")
 					result, downloadErr = tidalHifiService.Download(downloadURL, tempDir, "flac")
 					if downloadErr != nil {
-						fmt.Printf("[Queue] TidalHifi failed: %v\n", downloadErr)
+						slog.Debug("TidalHifi failed", "err", downloadErr)
 					}
 				}
 
 				// 2. Try Lucida (web API) if TidalHifi failed or not Tidal
 				if result == nil {
-					fmt.Printf("[Queue] Trying Lucida for %s...\n", source)
+					slog.Debug("trying Lucida", "source", source)
 					result, downloadErr = lucidaService.Download(downloadURL, tempDir, "flac")
 					if downloadErr != nil {
-						fmt.Printf("[Queue] Lucida failed: %v\n", downloadErr)
+						slog.Debug("Lucida failed", "err", downloadErr)
 					}
 				}
 
 				// 3. Try OrpheusDL/Streamrip (Python subprocess) as last resort
 				if result == nil && orpheusService.IsAvailable() {
-					fmt.Printf("[Queue] Trying OrpheusDL/Streamrip for %s...\n", source)
+					slog.Debug("trying OrpheusDL/Streamrip", "source", source)
 					q.UpdateStatus(id, StatusDownloadingAudio, 52, fmt.Sprintf("Trying OrpheusDL for %s...", source))
 					result, downloadErr = orpheusService.Download(downloadURL, tempDir, "flac")
 					if downloadErr != nil {
-						fmt.Printf("[Queue] OrpheusDL failed: %v\n", downloadErr)
+						slog.Debug("OrpheusDL failed", "err", downloadErr)
 					}
 				}
 
 				// Success!
 				if result != nil {
-					fmt.Printf("[Queue] FLAC downloaded from %s: %s\n", source, result.FilePath)
+					slog.Info("FLAC downloaded", "source", source, "path", result.FilePath)
 					audioDownloaded = true
 					audioPath = result.FilePath
 					q.updateItem(id, func(item *QueueItem) {
@@ -373,13 +374,13 @@ func (q *Queue) processItem(id string) {
 
 	// If songlink resolution failed or no FLAC sources found, try TidalHifi search
 	if !audioDownloaded && videoInfo.Artist != "" && videoInfo.Title != "" {
-		fmt.Printf("[Queue] Trying TidalHifi search for: %s - %s\n", videoInfo.Artist, videoInfo.Title)
+		slog.Debug("trying TidalHifi search", "artist", videoInfo.Artist, "title", videoInfo.Title)
 		q.UpdateStatus(id, StatusDownloadingAudio, 55, "Searching Tidal for track...")
 
 		if tidalHifiService.IsAvailable() {
 			result, err := tidalHifiService.DownloadBySearch(videoInfo.Artist, videoInfo.Title, tempDir)
 			if err == nil && result != nil {
-				fmt.Printf("[Queue] FLAC found via Tidal search: %s\n", result.FilePath)
+				slog.Info("FLAC found via Tidal search", "path", result.FilePath)
 				audioDownloaded = true
 				audioPath = result.FilePath
 				q.updateItem(id, func(item *QueueItem) {
@@ -387,7 +388,7 @@ func (q *Queue) processItem(id string) {
 					item.AudioPath = audioPath
 				})
 			} else {
-				fmt.Printf("[Queue] Tidal search failed: %v\n", err)
+				slog.Warn("Tidal search failed", "err", err)
 			}
 		}
 	}
@@ -529,44 +530,44 @@ func (q *Queue) processItem(id string) {
 			switch embedMode {
 			case LyricsEmbedFile:
 				if err := EmbedLyricsInFile(result.OutputPath, lyrics); err != nil {
-					fmt.Printf("[Queue] Warning: failed to embed lyrics: %v\n", err)
+					slog.Warn("failed to embed lyrics", "err", err)
 				} else {
-					fmt.Printf("[Queue] Lyrics embedded in file\n")
+					slog.Debug("lyrics embedded in file")
 				}
 			case LyricsEmbedLRC:
 				if lyrics.HasSync {
 					if lrcPath, err := SaveLRCFile(lyrics, result.OutputPath); err != nil {
-						fmt.Printf("[Queue] Warning: failed to save LRC file: %v\n", err)
+						slog.Warn("failed to save LRC file", "err", err)
 					} else {
-						fmt.Printf("[Queue] LRC file saved: %s\n", lrcPath)
+						slog.Debug("LRC file saved", "path", lrcPath)
 					}
 				} else if lyrics.PlainText != "" {
 					if txtPath, err := SavePlainLyricsFile(lyrics, result.OutputPath); err != nil {
-						fmt.Printf("[Queue] Warning: failed to save lyrics file: %v\n", err)
+						slog.Warn("failed to save lyrics file", "err", err)
 					} else {
-						fmt.Printf("[Queue] Lyrics file saved: %s\n", txtPath)
+						slog.Debug("lyrics file saved", "path", txtPath)
 					}
 				}
 			case LyricsEmbedBoth:
 				// Save LRC/TXT file
 				if lyrics.HasSync {
 					if lrcPath, err := SaveLRCFile(lyrics, result.OutputPath); err == nil {
-						fmt.Printf("[Queue] LRC file saved: %s\n", lrcPath)
+						slog.Debug("LRC file saved", "path", lrcPath)
 					}
 				} else if lyrics.PlainText != "" {
 					if txtPath, err := SavePlainLyricsFile(lyrics, result.OutputPath); err == nil {
-						fmt.Printf("[Queue] Lyrics file saved: %s\n", txtPath)
+						slog.Debug("lyrics file saved", "path", txtPath)
 					}
 				}
 				// Also embed in file
 				if err := EmbedLyricsInFile(result.OutputPath, lyrics); err != nil {
-					fmt.Printf("[Queue] Warning: failed to embed lyrics: %v\n", err)
+					slog.Warn("failed to embed lyrics", "err", err)
 				} else {
-					fmt.Printf("[Queue] Lyrics embedded in file\n")
+					slog.Debug("lyrics embedded in file")
 				}
 			}
 		} else if lyricsErr != nil {
-			fmt.Printf("[Queue] Lyrics not found: %v\n", lyricsErr)
+			slog.Debug("lyrics not found", "err", lyricsErr)
 		}
 	}
 
@@ -595,7 +596,7 @@ func (q *Queue) processItem(id string) {
 
 		if err := WriteNFO(metadata, nfoPath, nfoOpts); err != nil {
 			// Non-fatal, just log
-			fmt.Printf("Warning: failed to write NFO: %v\n", err)
+			slog.Warn("failed to write NFO", "err", err)
 		}
 	}
 

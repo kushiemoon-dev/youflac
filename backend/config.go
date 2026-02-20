@@ -24,6 +24,7 @@ type Config struct {
 	SoundEffectsEnabled  bool     `json:"soundEffectsEnabled"` // Play sounds on download complete, error, etc.
 	LyricsEnabled        bool     `json:"lyricsEnabled"`       // Fetch lyrics automatically
 	LyricsEmbedMode      string   `json:"lyricsEmbedMode"`     // "embed", "lrc", "both"
+	LogLevel             string   `json:"logLevel"`            // "debug", "info", "warn", "error"
 }
 
 var defaultConfig = Config{
@@ -39,6 +40,7 @@ var defaultConfig = Config{
 	SoundEffectsEnabled: true,
 	LyricsEnabled:       false,
 	LyricsEmbedMode:     "lrc",
+	LogLevel:            "info",
 }
 
 // GetConfigPath returns the path to the config file
