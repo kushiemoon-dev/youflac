@@ -45,3 +45,6 @@ Thumbs.db
 
 # Git worktrees
 .worktrees/
+
+# Planning/session files (local only)
+docs/plans/
