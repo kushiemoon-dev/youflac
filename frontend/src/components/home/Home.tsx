@@ -12,7 +12,9 @@ export function Home() {
     removeFromQueue,
     clearCompleted,
     retryFailed,
-    clearAll
+    clearAll,
+    pauseAll,
+    resumeAll,
   } = useQueue();
 
   const handleAdd = async (videoUrl: string, spotifyUrl?: string) => {
@@ -42,6 +44,8 @@ export function Home() {
             onClearCompleted={clearCompleted}
             onRetryFailed={retryFailed}
             onClearAll={clearAll}
+            onPauseAll={pauseAll}
+            onResumeAll={resumeAll}
           />
         </section>
 

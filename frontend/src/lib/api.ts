@@ -15,8 +15,24 @@ export interface Config {
   cookiesBrowser: string;
   accentColor: string;
   soundEffectsEnabled: boolean;
+  soundVolume: number;
   lyricsEnabled: boolean;
   lyricsEmbedMode: string;
+  logLevel: string;
+  proxyUrl: string;
+  downloadTimeoutMinutes: number;
+  preferredQuality: string;
+  generateM3u8: boolean;
+  skipExplicit: boolean;
+  saveCoverFile: boolean;
+  firstArtistOnly: boolean;
+}
+
+export interface LogEntry {
+  id: number;
+  time: string;
+  level: string;
+  message: string;
 }
 
 export interface DownloadRequest {
@@ -291,6 +307,28 @@ export async function retryWithOverride(id: string, req: RetryOverrideRequest): 
 
 export async function ClearQueue(): Promise<void> {
   await api<void>('/queue/clear', { method: 'POST' });
+}
+
+export async function PauseAll(): Promise<number> {
+  const res = await api<{ paused: number }>('/queue/pause-all', { method: 'POST' });
+  return res.paused;
+}
+
+export async function ResumeAll(): Promise<number> {
+  const res = await api<{ resumed: number }>('/queue/resume-all', { method: 'POST' });
+  return res.resumed;
+}
+
+export async function PauseQueueItem(id: string): Promise<void> {
+  await api<void>(`/queue/${id}/pause`, { method: 'POST' });
+}
+
+export async function ResumeQueueItem(id: string): Promise<void> {
+  await api<void>(`/queue/${id}/resume`, { method: 'POST' });
+}
+
+export async function FetchLogs(sinceId: number): Promise<LogEntry[]> {
+  return api<LogEntry[]>(`/logs?since=${sinceId}`);
 }
 
 export async function SaveQueue(): Promise<void> {

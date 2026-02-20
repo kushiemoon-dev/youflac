@@ -23,6 +23,19 @@ const RefreshIcon = () => (
   </svg>
 );
 
+const PauseIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="6" y="4" width="4" height="16" />
+    <rect x="14" y="4" width="4" height="16" />
+  </svg>
+);
+
+const PlayIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="5 3 19 12 5 21 5 3" />
+  </svg>
+);
+
 interface QueueListProps {
   items: QueueItemType[];
   stats: QueueStats | null;
@@ -31,6 +44,8 @@ interface QueueListProps {
   onClearCompleted: () => void;
   onRetryFailed: () => void;
   onClearAll: () => void;
+  onPauseAll?: () => void;
+  onResumeAll?: () => void;
 }
 
 export function QueueList({
@@ -40,9 +55,13 @@ export function QueueList({
   onRemove,
   onClearCompleted,
   onRetryFailed,
-  onClearAll
+  onClearAll,
+  onPauseAll,
+  onResumeAll,
 }: QueueListProps) {
   const hasItems = items.length > 0;
+  const hasActive = stats && (stats.active > 0 || stats.pending > 0);
+  const hasPaused = items.some((i) => i.status === 'paused');
   const hasCompleted = stats && stats.completed > 0;
   const hasFailed = stats && stats.failed > 0;
 
@@ -86,6 +105,25 @@ export function QueueList({
 
         {/* Actions */}
         <div className="flex items-center gap-2">
+          {hasItems && onResumeAll && hasPaused && (
+            <button
+              className="btn-ghost text-sm flex items-center gap-2"
+              onClick={onResumeAll}
+              style={{ color: 'var(--color-success)' }}
+            >
+              <PlayIcon />
+              Resume all
+            </button>
+          )}
+          {hasItems && onPauseAll && hasActive && (
+            <button
+              className="btn-ghost text-sm flex items-center gap-2"
+              onClick={onPauseAll}
+            >
+              <PauseIcon />
+              Pause all
+            </button>
+          )}
           {hasFailed && (
             <button
               className="btn-ghost text-sm flex items-center gap-2"

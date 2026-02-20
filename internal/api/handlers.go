@@ -132,6 +132,16 @@ func (s *Server) handleRetryFailed(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"retried": count})
 }
 
+func (s *Server) handlePauseAll(c *fiber.Ctx) error {
+	count := s.queue.PauseAll()
+	return c.JSON(fiber.Map{"paused": count})
+}
+
+func (s *Server) handleResumeAll(c *fiber.Ctx) error {
+	count := s.queue.ResumeAll()
+	return c.JSON(fiber.Map{"resumed": count})
+}
+
 func (s *Server) handleRetryQueueItemWithOverride(c *fiber.Ctx) error {
 	id := c.Params("id")
 
@@ -670,6 +680,17 @@ func (s *Server) handleSaveLRCFile(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"path": lrcPath})
+}
+
+// ============== Logs Handler ==============
+
+func (s *Server) handleGetLogs(c *fiber.Ctx) error {
+	sinceID := c.QueryInt("since", 0)
+	entries := backend.GetLogs(int64(sinceID))
+	if entries == nil {
+		entries = []backend.LogEntry{}
+	}
+	return c.JSON(entries)
 }
 
 // ============== Image Handler ==============

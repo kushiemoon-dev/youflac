@@ -30,6 +30,9 @@ type Config struct {
 	PreferredQuality        string  `json:"preferredQuality"`        // "highest", "24bit", "16bit"
 	GenerateM3U8            bool    `json:"generateM3u8"`            // Generate .m3u8 playlist when a batch completes
 	SkipExplicit            bool    `json:"skipExplicit"`            // Skip tracks marked explicit
+	SoundVolume             int     `json:"soundVolume"`             // Sound effects volume 0-100
+	SaveCoverFile           bool    `json:"saveCoverFile"`           // Save cover art as separate .jpg file
+	FirstArtistOnly         bool    `json:"firstArtistOnly"`         // Strip featured artists from artist tag
 }
 
 var defaultConfig = Config{
@@ -51,6 +54,9 @@ var defaultConfig = Config{
 	PreferredQuality:       "highest",
 	GenerateM3U8:           false,
 	SkipExplicit:           false,
+	SoundVolume:            70,
+	SaveCoverFile:          false,
+	FirstArtistOnly:        false,
 }
 
 // GetConfigPath returns the path to the config file

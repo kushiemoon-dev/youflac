@@ -462,6 +462,49 @@ func (q *Queue) ResumeItem(id string) error {
 	return fmt.Errorf("item not found: %s", id)
 }
 
+// PauseAll pauses all active and pending items. Returns the count of items paused.
+func (q *Queue) PauseAll() int {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
+	count := 0
+	for i := range q.items {
+		switch q.items[i].Status {
+		case StatusPending, StatusFetchingInfo, StatusDownloadingVideo,
+			StatusDownloadingAudio, StatusMuxing, StatusOrganizing:
+			if q.items[i].cancelFunc != nil {
+				q.items[i].cancelFunc()
+			}
+			q.items[i].Status = StatusPaused
+			q.items[i].Stage = "Paused"
+			item := q.items[i]
+			go q.emit(QueueEvent{Type: "updated", ItemID: item.ID, Item: &item})
+			count++
+		}
+	}
+	return count
+}
+
+// ResumeAll re-queues all paused items. Returns the count of items resumed.
+func (q *Queue) ResumeAll() int {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
+	count := 0
+	for i := range q.items {
+		if q.items[i].Status == StatusPaused {
+			q.items[i].Status = StatusPending
+			q.items[i].Progress = 0
+			q.items[i].Stage = "Waiting... (resumed)"
+			q.items[i].cancelFunc = nil
+			item := q.items[i]
+			go q.emit(QueueEvent{Type: "updated", ItemID: item.ID, Item: &item})
+			count++
+		}
+	}
+	return count
+}
+
 // ClearCompleted removes all completed items
 func (q *Queue) ClearCompleted() int {
 	q.mutex.Lock()

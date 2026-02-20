@@ -108,6 +108,16 @@ export function useQueue() {
     fetchQueue();
   }, [fetchQueue]);
 
+  const pauseAll = useCallback(async () => {
+    await Api.PauseAll();
+    fetchQueue();
+  }, [fetchQueue]);
+
+  const resumeAll = useCallback(async () => {
+    await Api.ResumeAll();
+    fetchQueue();
+  }, [fetchQueue]);
+
   return {
     items,
     stats,
@@ -119,6 +129,8 @@ export function useQueue() {
     retryFailed,
     clearAll,
     moveItem,
+    pauseAll,
+    resumeAll,
     refresh: fetchQueue
   };
 }

@@ -1,10 +1,19 @@
+import { useState, useEffect } from 'react';
 import type { Page } from '../../types';
+import * as Api from '../../lib/api';
 
 // SVG Icons as components
 const HomeIcon = () => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
     <polyline points="9 22 9 12 15 12 15 22" />
+  </svg>
+);
+
+const SearchIcon = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="11" cy="11" r="8" />
+    <line x1="21" y1="21" x2="16.65" y2="16.65" />
   </svg>
 );
 
@@ -48,19 +57,34 @@ interface SidebarProps {
   onNavigate: (page: Page) => void;
 }
 
-const navItems: { id: Page; icon: React.FC; label: string }[] = [
-  { id: 'home', icon: HomeIcon, label: 'Home' },
-  { id: 'history', icon: HistoryIcon, label: 'History' },
-  { id: 'settings', icon: SettingsIcon, label: 'Settings' },
-  { id: 'files', icon: FolderIcon, label: 'Files' },
-  { id: 'terminal', icon: TerminalIcon, label: 'Terminal' },
-];
-
-const bottomItems: { id: Page; icon: React.FC; label: string }[] = [
-  { id: 'about', icon: InfoIcon, label: 'About' },
-];
-
 export function Sidebar({ activePage, onNavigate }: SidebarProps) {
+  const [queueCount, setQueueCount] = useState(0);
+
+  // Poll queue stats every 3s for badge count
+  useEffect(() => {
+    const fetchStats = () => {
+      Api.GetQueueStats()
+        .then((stats) => setQueueCount((stats.pending ?? 0) + (stats.active ?? 0)))
+        .catch(() => {});
+    };
+    fetchStats();
+    const timer = setInterval(fetchStats, 3000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const navItems: { id: Page | 'search'; icon: React.FC; label: string; targetPage: Page }[] = [
+    { id: 'home', icon: HomeIcon, label: 'Home', targetPage: 'home' },
+    { id: 'search', icon: SearchIcon, label: 'Search', targetPage: 'home' },
+    { id: 'history', icon: HistoryIcon, label: 'History', targetPage: 'history' },
+    { id: 'files', icon: FolderIcon, label: 'Files', targetPage: 'files' },
+  ];
+
+  const bottomItems: { id: Page; icon: React.FC; label: string }[] = [
+    { id: 'terminal', icon: TerminalIcon, label: 'Terminal' },
+    { id: 'settings', icon: SettingsIcon, label: 'Settings' },
+    { id: 'about', icon: InfoIcon, label: 'About' },
+  ];
+
   return (
     <aside
       className="flex flex-col items-center py-4 w-[64px] min-h-screen"
@@ -78,16 +102,8 @@ export function Sidebar({ activePage, onNavigate }: SidebarProps) {
           }}
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M4 4h16v16H4V4z"
-              fill="none"
-              stroke="#000"
-              strokeWidth="2"
-            />
-            <path
-              d="M9 8v8l7-4-7-4z"
-              fill="#000"
-            />
+            <path d="M4 4h16v16H4V4z" fill="none" stroke="#000" strokeWidth="2" />
+            <path d="M9 8v8l7-4-7-4z" fill="#000" />
           </svg>
         </div>
         {/* Glow effect */}
@@ -99,20 +115,40 @@ export function Sidebar({ activePage, onNavigate }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex flex-col gap-2 flex-1">
-        {navItems.map((item, index) => (
-          <button
-            key={item.id}
-            onClick={() => onNavigate(item.id)}
-            className={`sidebar-item animate-slide-in stagger-${index + 1}`}
-            style={{ animationFillMode: 'backwards' }}
-            title={item.label}
-            aria-label={item.label}
-            aria-current={activePage === item.id ? 'page' : undefined}
-            data-active={activePage === item.id}
-          >
-            <item.icon />
-          </button>
-        ))}
+        {navItems.map((item, index) => {
+          const isActive = item.id === 'search'
+            ? false  // Search is a shortcut to Home, never "active"
+            : activePage === item.id;
+
+          return (
+            <button
+              key={item.id}
+              onClick={() => onNavigate(item.targetPage)}
+              className={`sidebar-item animate-slide-in stagger-${index + 1}`}
+              style={{ animationFillMode: 'backwards' }}
+              title={item.label}
+              aria-label={item.label}
+              aria-current={isActive ? 'page' : undefined}
+              data-active={isActive}
+            >
+              <div className="relative">
+                <item.icon />
+                {/* Badge count on Home icon */}
+                {item.id === 'home' && queueCount > 0 && (
+                  <span
+                    className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full flex items-center justify-center text-[10px] font-bold leading-none"
+                    style={{
+                      background: 'var(--color-accent)',
+                      color: '#000',
+                    }}
+                  >
+                    {queueCount > 99 ? '99+' : queueCount}
+                  </span>
+                )}
+              </div>
+            </button>
+          );
+        })}
       </nav>
 
       {/* Bottom items */}
@@ -121,9 +157,11 @@ export function Sidebar({ activePage, onNavigate }: SidebarProps) {
           <button
             key={item.id}
             onClick={() => onNavigate(item.id)}
-            className={`sidebar-item ${activePage === item.id ? 'active' : ''}`}
+            className="sidebar-item"
             title={item.label}
             aria-label={item.label}
+            aria-current={activePage === item.id ? 'page' : undefined}
+            data-active={activePage === item.id}
           >
             <item.icon />
           </button>
