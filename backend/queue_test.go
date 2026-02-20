@@ -666,3 +666,103 @@ func TestCancelItemNotFound(t *testing.T) {
 		t.Error("Expected error for cancelling non-existent item")
 	}
 }
+
+func TestGetFailedItems(t *testing.T) {
+	ctx := context.Background()
+	q := NewQueue(ctx, 1)
+
+	id1, _ := q.AddToQueue(DownloadRequest{VideoURL: "https://youtube.com/watch?v=aaa"})
+	id2, _ := q.AddToQueue(DownloadRequest{VideoURL: "https://youtube.com/watch?v=bbb"})
+
+	// Initially no failed items
+	if got := q.GetFailedItems(); len(got) != 0 {
+		t.Errorf("expected 0 failed, got %d", len(got))
+	}
+
+	// Mark id1 as error
+	q.SetItemError(id1, fmt.Errorf("download failed"))
+
+	failed := q.GetFailedItems()
+	if len(failed) != 1 {
+		t.Fatalf("expected 1 failed, got %d", len(failed))
+	}
+	if failed[0].ID != id1 {
+		t.Errorf("expected failed item id %s, got %s", id1, failed[0].ID)
+	}
+
+	// id2 still pending - not in failed
+	for _, f := range failed {
+		if f.ID == id2 {
+			t.Error("pending item should not appear in failed list")
+		}
+	}
+}
+
+func TestPauseResumeItem(t *testing.T) {
+	ctx := context.Background()
+	q := NewQueue(ctx, 1)
+
+	id, _ := q.AddToQueue(DownloadRequest{VideoURL: "https://youtube.com/watch?v=test"})
+
+	// Pause a pending item
+	if err := q.PauseItem(id); err != nil {
+		t.Fatalf("PauseItem failed: %v", err)
+	}
+
+	item := q.GetItem(id)
+	if item.Status != StatusPaused {
+		t.Errorf("expected StatusPaused, got %s", item.Status)
+	}
+
+	// Resume the paused item
+	if err := q.ResumeItem(id); err != nil {
+		t.Fatalf("ResumeItem failed: %v", err)
+	}
+
+	item = q.GetItem(id)
+	if item.Status != StatusPending {
+		t.Errorf("expected StatusPending after resume, got %s", item.Status)
+	}
+}
+
+func TestPauseItem_NotFound(t *testing.T) {
+	ctx := context.Background()
+	q := NewQueue(ctx, 1)
+
+	if err := q.PauseItem("does-not-exist"); err == nil {
+		t.Error("expected error for non-existent item")
+	}
+}
+
+func TestResumeItem_NotPaused(t *testing.T) {
+	ctx := context.Background()
+	q := NewQueue(ctx, 1)
+
+	id, _ := q.AddToQueue(DownloadRequest{VideoURL: "https://youtube.com/watch?v=test"})
+
+	// Trying to resume a pending item (not paused) should error
+	if err := q.ResumeItem(id); err == nil {
+		t.Error("expected error when resuming non-paused item")
+	}
+}
+
+func TestRetryFailed(t *testing.T) {
+	ctx := context.Background()
+	q := NewQueue(ctx, 1)
+
+	id, _ := q.AddToQueue(DownloadRequest{VideoURL: "https://youtube.com/watch?v=retry"})
+	q.SetItemError(id, fmt.Errorf("test error"))
+
+	count := q.RetryFailed()
+	if count != 1 {
+		t.Errorf("expected 1 retried, got %d", count)
+	}
+
+	item := q.GetItem(id)
+	if item.Status != StatusPending {
+		t.Errorf("expected StatusPending after retry, got %s", item.Status)
+	}
+	if item.Error != "" {
+		t.Errorf("error should be cleared after retry, got %q", item.Error)
+	}
+}

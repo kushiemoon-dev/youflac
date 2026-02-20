@@ -149,22 +149,29 @@ func (u *UnifiedAudioDownloader) GetTrackInfo(musicURL string) (*AudioTrackInfo,
 	return nil, fmt.Errorf("no services could fetch track info")
 }
 
-// qualityRank maps quality tier keywords to a numeric rank (higher = better).
-var qualityRank = map[string]int{
-	"hi_res":  3,
-	"hires":   3,
-	"24bit":   3,
-	"highest": 3,
-	"lossless": 2,
-	"flac":    2,
-	"16bit":   2,
-	"high":    1,
-	"lossy":   1,
-	"mp3":     1,
+// qualityTier maps a keyword to a numeric rank (higher = better).
+// Order matters: longer/more specific keywords must appear before shorter ones
+// (e.g. "highest" before "high", "hires" before "hi").
+type qualityTier struct {
+	keyword string
+	rank    int
+}
+
+var qualityTiers = []qualityTier{
+	{"hi_res", 3},
+	{"hires", 3},
+	{"24bit", 3},
+	{"highest", 3},
+	{"lossless", 2},
+	{"flac", 2},
+	{"16bit", 2},
+	{"high", 1},
+	{"lossy", 1},
+	{"mp3", 1},
 }
 
 // isQualityDowngrade reports whether the actualQuality is lower than the
-// requestedQuality, based on the qualityRank table.
+// requestedQuality, based on the qualityTiers table.
 func isQualityDowngrade(requested, actual string) bool {
 	reqRank := qualityRankOf(requested)
 	actRank := qualityRankOf(actual)
@@ -173,9 +180,9 @@ func isQualityDowngrade(requested, actual string) bool {
 
 func qualityRankOf(q string) int {
 	q = strings.ToLower(q)
-	for key, rank := range qualityRank {
-		if strings.Contains(q, key) {
-			return rank
+	for _, tier := range qualityTiers {
+		if strings.Contains(q, tier.keyword) {
+			return tier.rank
 		}
 	}
 	return 0
