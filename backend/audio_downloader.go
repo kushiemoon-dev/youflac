@@ -3,6 +3,7 @@ package backend
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -79,7 +80,7 @@ func NewUnifiedAudioDownloader(config *DownloadConfig) *UnifiedAudioDownloader {
 
 	return &UnifiedAudioDownloader{
 		services: []AudioDownloadService{
-			NewLucidaService(),
+			NewLucidaService(nil),
 			// Add more services here as they become available
 		},
 		config: config,
@@ -146,4 +147,36 @@ func (u *UnifiedAudioDownloader) GetTrackInfo(musicURL string) (*AudioTrackInfo,
 		}
 	}
 	return nil, fmt.Errorf("no services could fetch track info")
+}
+
+// qualityRank maps quality tier keywords to a numeric rank (higher = better).
+var qualityRank = map[string]int{
+	"hi_res":  3,
+	"hires":   3,
+	"24bit":   3,
+	"highest": 3,
+	"lossless": 2,
+	"flac":    2,
+	"16bit":   2,
+	"high":    1,
+	"lossy":   1,
+	"mp3":     1,
+}
+
+// isQualityDowngrade reports whether the actualQuality is lower than the
+// requestedQuality, based on the qualityRank table.
+func isQualityDowngrade(requested, actual string) bool {
+	reqRank := qualityRankOf(requested)
+	actRank := qualityRankOf(actual)
+	return reqRank > 0 && actRank > 0 && actRank < reqRank
+}
+
+func qualityRankOf(q string) int {
+	q = strings.ToLower(q)
+	for key, rank := range qualityRank {
+		if strings.Contains(q, key) {
+			return rank
+		}
+	}
+	return 0
 }

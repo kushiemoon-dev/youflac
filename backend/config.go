@@ -24,7 +24,10 @@ type Config struct {
 	SoundEffectsEnabled  bool     `json:"soundEffectsEnabled"` // Play sounds on download complete, error, etc.
 	LyricsEnabled        bool     `json:"lyricsEnabled"`       // Fetch lyrics automatically
 	LyricsEmbedMode      string   `json:"lyricsEmbedMode"`     // "embed", "lrc", "both"
-	LogLevel             string   `json:"logLevel"`            // "debug", "info", "warn", "error"
+	LogLevel                string  `json:"logLevel"`                // "debug", "info", "warn", "error"
+	ProxyURL                string  `json:"proxyUrl"`                // "socks5://127.0.0.1:1080" or ""
+	DownloadTimeoutMinutes  float64 `json:"downloadTimeoutMinutes"`  // per-file download timeout (0 = default 10m)
+	PreferredQuality        string  `json:"preferredQuality"`        // "highest", "24bit", "16bit"
 }
 
 var defaultConfig = Config{
@@ -38,9 +41,12 @@ var defaultConfig = Config{
 	Theme:               "system",
 	AccentColor:         "pink",
 	SoundEffectsEnabled: true,
-	LyricsEnabled:       false,
-	LyricsEmbedMode:     "lrc",
-	LogLevel:            "info",
+	LyricsEnabled:          false,
+	LyricsEmbedMode:        "lrc",
+	LogLevel:               "info",
+	ProxyURL:               "",
+	DownloadTimeoutMinutes: 10,
+	PreferredQuality:       "highest",
 }
 
 // GetConfigPath returns the path to the config file
@@ -168,6 +174,17 @@ func LoadConfigWithEnv() (*Config, error) {
 		}
 		if len(sources) > 0 {
 			config.AudioSourcePriority = sources
+		}
+	}
+	if v := os.Getenv("LOG_LEVEL"); v != "" {
+		config.LogLevel = v
+	}
+	if v := os.Getenv("PROXY_URL"); v != "" {
+		config.ProxyURL = v
+	}
+	if v := os.Getenv("DOWNLOAD_TIMEOUT_MINUTES"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 {
+			config.DownloadTimeoutMinutes = f
 		}
 	}
 

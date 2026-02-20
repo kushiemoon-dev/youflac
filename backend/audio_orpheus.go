@@ -91,12 +91,14 @@ type TidalStreamDataResponse struct {
 	Data    TidalStreamResponse `json:"data"`
 }
 
-// NewTidalHifiService creates a new Tidal HiFi download service
-func NewTidalHifiService() *TidalHifiService {
+// NewTidalHifiService creates a new Tidal HiFi download service.
+// If client is nil, a default client is used (respects PROXY_URL env var).
+func NewTidalHifiService(client *http.Client) *TidalHifiService {
+	if client == nil {
+		client, _ = NewHTTPClient(0, "")
+	}
 	return &TidalHifiService{
-		client: &http.Client{
-			Timeout: 60 * time.Second,
-		},
+		client:  client,
 		baseURL: tidalHifiAPIBase,
 	}
 }

@@ -52,8 +52,9 @@ type QueueItem struct {
 	// Matching info
 	MatchScore      int    `json:"matchScore,omitempty"`
 	MatchConfidence string `json:"matchConfidence,omitempty"`
-	AudioSource     string `json:"audioSource,omitempty"` // tidal, qobuz, amazon, etc.
-	Quality         string `json:"quality,omitempty"`     // FLAC quality (e.g. "24-bit/96kHz")
+	AudioSource     string `json:"audioSource,omitempty"`   // tidal, qobuz, amazon, etc.
+	Quality         string `json:"quality,omitempty"`       // Requested quality tier
+	ActualQuality   string `json:"actualQuality,omitempty"` // Actual quality obtained (may differ from requested)
 
 	// Audio-only fallback (video unavailable)
 	AudioOnly bool `json:"audioOnly,omitempty"`

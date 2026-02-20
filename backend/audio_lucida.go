@@ -4,28 +4,30 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 // ============================================================================
 // Lucida.to Service Implementation
-// Used by many music download tools including SpotiFLAC-style applications
 // ============================================================================
 
-const (
-	lucidaAPIBase = "https://lucida.to"
-	lucidaAPIPath = "/api/load"
-)
+const lucidaAPIPath = "/api/load"
+
+// lucidaEndpoints is tried in order; first one that returns a 2xx is used.
+var lucidaEndpoints = []string{
+	"https://lucida.to",
+	"https://lucida.su",
+}
 
 // LucidaService implements AudioDownloadService using lucida.to
 type LucidaService struct {
-	client  *http.Client
-	baseURL string
+	client    *http.Client
+	endpoints []string // overrideable for testing
 }
 
 // LucidaResponse represents the API response from lucida.to
@@ -51,13 +53,15 @@ type LucidaResponse struct {
 	} `json:"formats"`
 }
 
-// NewLucidaService creates a new Lucida download service
-func NewLucidaService() *LucidaService {
+// NewLucidaService creates a new Lucida download service.
+// If client is nil, a default client is used (respects PROXY_URL env var).
+func NewLucidaService(client *http.Client) *LucidaService {
+	if client == nil {
+		client, _ = NewHTTPClient(0, "")
+	}
 	return &LucidaService{
-		client: &http.Client{
-			Timeout: 60 * time.Second,
-		},
-		baseURL: lucidaAPIBase,
+		client:    client,
+		endpoints: lucidaEndpoints,
 	}
 }
 
@@ -66,12 +70,17 @@ func (l *LucidaService) Name() string {
 }
 
 func (l *LucidaService) IsAvailable() bool {
-	resp, err := l.client.Head(l.baseURL)
-	if err != nil {
-		return false
+	for _, endpoint := range l.endpoints {
+		resp, err := l.client.Head(endpoint)
+		if err != nil {
+			continue
+		}
+		resp.Body.Close()
+		if resp.StatusCode < 500 {
+			return true
+		}
 	}
-	defer resp.Body.Close()
-	return resp.StatusCode < 500
+	return false
 }
 
 func (l *LucidaService) SupportsFormat(format string) bool {
@@ -105,41 +114,59 @@ func (l *LucidaService) GetTrackInfo(trackURL string) (*AudioTrackInfo, error) {
 }
 
 func (l *LucidaService) fetchTrackData(trackURL string) (*LucidaResponse, error) {
-	apiURL := l.baseURL + lucidaAPIPath
-
 	data := url.Values{}
 	data.Set("url", trackURL)
 
-	req, err := http.NewRequest("POST", apiURL, strings.NewReader(data.Encode()))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-	req.Header.Set("Origin", "https://lucida.to")
-	req.Header.Set("Referer", "https://lucida.to/")
+	var lastErr error
+	for _, endpoint := range l.endpoints {
+		apiURL := endpoint + lucidaAPIPath
 
-	resp, err := l.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("API request failed: %w", err)
-	}
-	defer resp.Body.Close()
+		req, err := http.NewRequest("POST", apiURL, strings.NewReader(data.Encode()))
+		if err != nil {
+			lastErr = fmt.Errorf("failed to create request for %s: %w", endpoint, err)
+			continue
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+		req.Header.Set("Origin", endpoint)
+		req.Header.Set("Referer", endpoint+"/")
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		resp, err := l.client.Do(req)
+		if err != nil {
+			slog.Debug("lucida endpoint failed", "endpoint", endpoint, "err", err)
+			lastErr = err
+			continue
+		}
+
+		if resp.StatusCode >= 500 {
+			resp.Body.Close()
+			slog.Debug("lucida endpoint returned server error", "endpoint", endpoint, "status", resp.StatusCode)
+			lastErr = fmt.Errorf("endpoint %s returned %d", endpoint, resp.StatusCode)
+			continue
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			lastErr = fmt.Errorf("failed to read response from %s: %w", endpoint, err)
+			continue
+		}
+
+		var result LucidaResponse
+		if err := json.Unmarshal(body, &result); err != nil {
+			lastErr = fmt.Errorf("failed to parse response from %s: %w", endpoint, err)
+			continue
+		}
+
+		if !result.Success {
+			return nil, fmt.Errorf("API error: %s", result.Error)
+		}
+
+		slog.Debug("lucida endpoint succeeded", "endpoint", endpoint)
+		return &result, nil
 	}
 
-	var result LucidaResponse
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	if !result.Success {
-		return nil, fmt.Errorf("API error: %s", result.Error)
-	}
-
-	return &result, nil
+	return nil, fmt.Errorf("all lucida endpoints failed, last error: %w", lastErr)
 }
 
 func (l *LucidaService) Download(trackURL string, outputDir string, format string) (*AudioDownloadResult, error) {

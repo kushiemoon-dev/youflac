@@ -278,9 +278,19 @@ func (q *Queue) processItem(id string) {
 	// Try to find and download FLAC audio using multi-service cascade
 	audioDownloaded := false
 
-	// Initialize download services
-	tidalHifiService := NewTidalHifiService()
-	lucidaService := NewLucidaService()
+	// Initialize download services with shared HTTP client (proxy + timeout from config)
+	timeoutMinutes := config.DownloadTimeoutMinutes
+	if timeoutMinutes <= 0 {
+		timeoutMinutes = 10
+	}
+	downloadTimeout := time.Duration(timeoutMinutes * float64(time.Minute))
+	httpClient, err := NewHTTPClient(downloadTimeout, config.ProxyURL)
+	if err != nil {
+		slog.Warn("failed to create HTTP client with proxy, falling back to default", "err", err)
+		httpClient, _ = NewHTTPClient(downloadTimeout, "")
+	}
+	tidalHifiService := NewTidalHifiService(httpClient)
+	lucidaService := NewLucidaService(httpClient)
 	orpheusService := NewOrpheusDLService()
 
 	// Get audio links via songlink
@@ -359,12 +369,17 @@ func (q *Queue) processItem(id string) {
 
 				// Success!
 				if result != nil {
-					slog.Info("FLAC downloaded", "source", source, "path", result.FilePath)
+					actualQuality := result.Track.Quality
+					slog.Info("FLAC downloaded", "source", source, "path", result.FilePath, "quality", actualQuality)
 					audioDownloaded = true
 					audioPath = result.FilePath
+					if actualQuality != "" && isQualityDowngrade(config.PreferredQuality, actualQuality) {
+						slog.Warn("quality downgraded", "requested", config.PreferredQuality, "actual", actualQuality, "source", source)
+					}
 					q.updateItem(id, func(item *QueueItem) {
 						item.AudioSource = source
 						item.AudioPath = audioPath
+						item.ActualQuality = actualQuality
 					})
 					break
 				}

@@ -5,7 +5,7 @@ import (
 )
 
 func TestTidalHifiService_Search(t *testing.T) {
-	service := NewTidalHifiService()
+	service := NewTidalHifiService(nil)
 
 	if !service.IsAvailable() {
 		t.Skip("TidalHifi service not available")
@@ -22,7 +22,7 @@ func TestTidalHifiService_Search(t *testing.T) {
 }
 
 func TestTidalHifiService_GetStreamURL(t *testing.T) {
-	service := NewTidalHifiService()
+	service := NewTidalHifiService(nil)
 
 	if !service.IsAvailable() {
 		t.Skip("TidalHifi service not available")
@@ -44,7 +44,7 @@ func TestTidalHifiService_DownloadBySearch(t *testing.T) {
 		t.Skip("Skipping download test in short mode")
 	}
 
-	service := NewTidalHifiService()
+	service := NewTidalHifiService(nil)
 
 	if !service.IsAvailable() {
 		t.Skip("TidalHifi service not available")
