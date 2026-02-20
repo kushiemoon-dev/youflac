@@ -875,6 +875,10 @@ func (o *OrpheusDLService) Download(trackURL string, outputDir string, format st
 }
 
 func (o *OrpheusDLService) tryStreamrip(trackURL string, outputDir string) (*AudioDownloadResult, error) {
+	if err := ValidateTrackURL(trackURL); err != nil {
+		return nil, fmt.Errorf("rejected track URL: %w", err)
+	}
+
 	// streamrip 'rip' command (installed via pipx): rip url <url>
 	// Downloads to ~/music by default, we'll move it after
 
@@ -918,6 +922,10 @@ func (o *OrpheusDLService) tryStreamrip(trackURL string, outputDir string) (*Aud
 }
 
 func (o *OrpheusDLService) tryOrpheusDL(trackURL string, outputDir string) (*AudioDownloadResult, error) {
+	if err := ValidateTrackURL(trackURL); err != nil {
+		return nil, fmt.Errorf("rejected track URL: %w", err)
+	}
+
 	// orpheusdl command varies by version, try common patterns
 	cmd := exec.Command(o.pythonPath, "-m", "orpheusdl", trackURL, "-o", outputDir, "-q", "flac")
 	cmd.Dir = outputDir

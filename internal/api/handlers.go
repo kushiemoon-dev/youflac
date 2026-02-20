@@ -38,6 +38,10 @@ func (s *Server) handleAddToQueue(c *fiber.Ctx) error {
 		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
 	}
 
+	if err := backend.ValidateYouTubeURL(req.VideoURL); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid video URL: " + err.Error()})
+	}
+
 	id, err := s.queue.AddToQueue(req)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
@@ -112,6 +116,10 @@ func (s *Server) handleAddPlaylistToQueue(c *fiber.Ctx) error {
 		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
 	}
 
+	if err := backend.ValidateYouTubeURL(body.URL); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid playlist URL: " + err.Error()})
+	}
+
 	quality := body.Quality
 	if quality == "" {
 		quality = s.config.VideoQuality
@@ -163,6 +171,16 @@ func (s *Server) handleSaveConfig(c *fiber.Ctx) error {
 	var config backend.Config
 	if err := c.BodyParser(&config); err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
+	}
+
+	if err := backend.ValidateOutputDirectory(config.OutputDirectory); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid output directory: " + err.Error()})
+	}
+
+	if len(config.AudioSourcePriority) > 0 {
+		if err := backend.ValidateAudioSources(config.AudioSourcePriority); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "Invalid audio source priority: " + err.Error()})
+		}
 	}
 
 	if err := backend.SaveConfig(&config); err != nil {
@@ -600,24 +618,33 @@ func (s *Server) handleGetImage(c *fiber.Ctx) error {
 		return c.Status(400).JSON(fiber.Map{"error": "path required"})
 	}
 
-	// Security: only allow temp directory or output directory
-	tempDir := os.TempDir()
-	outputDir := s.config.OutputDirectory
-	if outputDir == "" {
-		outputDir = backend.GetDefaultOutputDirectory()
-	}
-
-	if !strings.HasPrefix(path, tempDir) && !strings.HasPrefix(path, outputDir) {
+	// Security: resolve the real path and check it's within allowed directories.
+	// filepath.Abs normalizes ".." traversal sequences before we compare.
+	absPath, err := filepath.Abs(path)
+	if err != nil {
 		return c.Status(403).JSON(fiber.Map{"error": "Access denied"})
 	}
 
-	data, err := os.ReadFile(path)
+	absTemp, _ := filepath.Abs(os.TempDir())
+	absOutput := s.config.OutputDirectory
+	if absOutput == "" {
+		absOutput = backend.GetDefaultOutputDirectory()
+	}
+	absOutput, _ = filepath.Abs(absOutput)
+
+	// Ensure the separator-terminated prefix so "/tmp" doesn't match "/tmpother"
+	if !strings.HasPrefix(absPath, absTemp+string(filepath.Separator)) &&
+		!strings.HasPrefix(absPath, absOutput+string(filepath.Separator)) {
+		return c.Status(403).JSON(fiber.Map{"error": "Access denied"})
+	}
+
+	data, err := os.ReadFile(absPath)
 	if err != nil {
 		return c.Status(404).JSON(fiber.Map{"error": "File not found"})
 	}
 
 	// Return as data URL
-	ext := strings.ToLower(filepath.Ext(path))
+	ext := strings.ToLower(filepath.Ext(absPath))
 	mimeType := "image/png"
 	if ext == ".jpg" || ext == ".jpeg" {
 		mimeType = "image/jpeg"
