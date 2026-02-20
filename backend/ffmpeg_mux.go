@@ -111,6 +111,65 @@ func MuxVideoAudio(videoPath, audioPath, outputPath string, opts MuxOptions) err
 	return MuxVideoAudioWithProgress(videoPath, audioPath, outputPath, opts, nil)
 }
 
+// DetectLeadingSilence returns the duration of silence at the very start of an audio file.
+// Returns 0 if no leading silence is detected or if detection fails.
+func DetectLeadingSilence(filePath string) (float64, error) {
+	ffmpegPath := GetFFmpegPath()
+	args := []string{
+		"-i", filePath,
+		"-af", "silencedetect=noise=-50dB:d=0.05",
+		"-f", "null",
+		"-",
+	}
+
+	cmd := exec.Command(ffmpegPath, args...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	cmd.Run() // Ignore exit code; silencedetect output is in stderr
+
+	output := stderr.String()
+
+	silenceStartRe := regexp.MustCompile(`silence_start: ([\d.]+)`)
+	silenceEndRe := regexp.MustCompile(`silence_end: ([\d.]+)`)
+
+	startMatches := silenceStartRe.FindAllStringSubmatch(output, -1)
+	endMatches := silenceEndRe.FindAllStringSubmatch(output, -1)
+
+	if len(startMatches) > 0 && len(endMatches) > 0 {
+		firstStart, err1 := strconv.ParseFloat(startMatches[0][1], 64)
+		firstEnd, err2 := strconv.ParseFloat(endMatches[0][1], 64)
+		// Only trim if silence begins at the very start of the file
+		if err1 == nil && err2 == nil && firstStart < 0.01 {
+			return firstEnd, nil
+		}
+	}
+
+	return 0, nil
+}
+
+// TrimAudioStart removes the first `duration` seconds from an audio file using
+// sample-accurate audio filters. Output is re-encoded to FLAC (lossless).
+func TrimAudioStart(inputPath, outputPath string, duration float64) error {
+	ffmpegPath := GetFFmpegPath()
+	args := []string{
+		"-y",
+		"-i", inputPath,
+		"-af", fmt.Sprintf("atrim=start=%.6f,asetpts=PTS-STARTPTS", duration),
+		"-c:a", "flac",
+		"-compression_level", "5",
+		outputPath,
+	}
+
+	cmd := exec.Command(ffmpegPath, args...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("audio trim failed: %v - %s", err, stderr.String())
+	}
+	return nil
+}
+
 // MuxVideoAudioWithProgress combines video and audio with progress callback
 func MuxVideoAudioWithProgress(videoPath, audioPath, outputPath string, opts MuxOptions, progress ProgressCallback) error {
 	if _, err := os.Stat(videoPath); os.IsNotExist(err) {
@@ -129,6 +188,22 @@ func MuxVideoAudioWithProgress(videoPath, audioPath, outputPath string, opts Mux
 		progress(0, "Preparing mux")
 	}
 
+	// Detect and trim leading silence in audio to keep A/V in sync.
+	// Tidal/Qobuz FLACs often have a short digital silence at the start
+	// that YouTube's audio track doesn't, causing audible drift.
+	const minSilenceTrimSec = 0.1 // ignore silences shorter than 100 ms
+	effectiveAudioPath := audioPath
+	if leadingSilence, err := DetectLeadingSilence(audioPath); err == nil && leadingSilence > minSilenceTrimSec {
+		trimPath := audioPath + ".sync_trimmed.flac"
+		if trimErr := TrimAudioStart(audioPath, trimPath, leadingSilence); trimErr == nil {
+			slog.Info("trimmed leading silence for A/V sync", "duration_sec", leadingSilence, "path", trimPath)
+			defer os.Remove(trimPath)
+			effectiveAudioPath = trimPath
+		} else {
+			slog.Warn("could not trim leading silence, sync may be off", "err", trimErr)
+		}
+	}
+
 	ffmpegPath := GetFFmpegPath()
 	args := []string{}
 
@@ -139,7 +214,7 @@ func MuxVideoAudioWithProgress(videoPath, audioPath, outputPath string, opts Mux
 	}
 
 	args = append(args, "-i", videoPath)
-	args = append(args, "-i", audioPath)
+	args = append(args, "-i", effectiveAudioPath)
 
 	hasCover := opts.CoverArtPath != "" && fileExists(opts.CoverArtPath)
 	if hasCover {
