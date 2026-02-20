@@ -1,9 +1,6 @@
 services:
   youflac:
-    image: youflac:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/kushiemoon-dev/youflac:latest
     container_name: youflac
     restart: unless-stopped
     ports:
