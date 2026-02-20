@@ -410,6 +410,20 @@ func (q *Queue) ClearCompleted() int {
 	return removed
 }
 
+// GetFailedItems returns all queue items that have Status == StatusError.
+func (q *Queue) GetFailedItems() []QueueItem {
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
+
+	var failed []QueueItem
+	for _, item := range q.items {
+		if item.Status == StatusError {
+			failed = append(failed, item)
+		}
+	}
+	return failed
+}
+
 // RetryFailed resets all failed items to pending for retry
 func (q *Queue) RetryFailed() int {
 	q.mutex.Lock()

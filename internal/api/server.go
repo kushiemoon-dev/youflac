@@ -73,8 +73,10 @@ func (s *Server) setupRoutes() {
 	api.Get("/queue", s.handleGetQueue)
 	api.Post("/queue", s.handleAddToQueue)
 	api.Get("/queue/stats", s.handleGetQueueStats)
+	api.Get("/queue/failed/export", s.handleExportFailed)
 	api.Post("/queue/clear", s.handleClearCompleted)
 	api.Post("/queue/retry", s.handleRetryFailed)
+	api.Post("/queue/retry-failed", s.handleRetryFailed)
 	api.Get("/queue/:id", s.handleGetQueueItem)
 	api.Delete("/queue/:id", s.handleRemoveFromQueue)
 	api.Post("/queue/:id/cancel", s.handleCancelQueueItem)
@@ -119,6 +121,9 @@ func (s *Server) setupRoutes() {
 
 	// Static image serving (for spectrograms, thumbnails)
 	api.Get("/image", s.handleGetImage)
+
+	// Service status
+	api.Get("/services/status", s.handleServicesStatus)
 
 	// Version
 	api.Get("/version", s.handleGetVersion)

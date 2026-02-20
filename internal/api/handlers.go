@@ -2,9 +2,11 @@ package api
 
 import (
 	"encoding/base64"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -23,6 +25,15 @@ func (s *Server) handleHealth(c *fiber.Ctx) error {
 
 func (s *Server) handleGetVersion(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"version": AppVersion})
+}
+
+func (s *Server) handleServicesStatus(c *fiber.Ctx) error {
+	proxyURL := ""
+	if s.config != nil {
+		proxyURL = s.config.ProxyURL
+	}
+	statuses := backend.CheckServiceStatus(proxyURL)
+	return c.JSON(statuses)
 }
 
 // ============== Queue Handlers ==============
@@ -103,6 +114,25 @@ func (s *Server) handleClearCompleted(c *fiber.Ctx) error {
 func (s *Server) handleRetryFailed(c *fiber.Ctx) error {
 	count := s.queue.RetryFailed()
 	return c.JSON(fiber.Map{"retried": count})
+}
+
+func (s *Server) handleExportFailed(c *fiber.Ctx) error {
+	failed := s.queue.GetFailedItems()
+	if len(failed) == 0 {
+		return c.Status(404).JSON(fiber.Map{"error": "no failed items"})
+	}
+
+	var sb strings.Builder
+	for _, item := range failed {
+		if item.VideoURL != "" {
+			sb.WriteString(item.VideoURL)
+			sb.WriteByte('\n')
+		}
+	}
+
+	c.Set("Content-Type", "text/plain; charset=utf-8")
+	c.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="failed_downloads_%s.txt"`, time.Now().Format("2006-01-02")))
+	return c.SendString(sb.String())
 }
 
 // ============== Playlist Handlers ==============
