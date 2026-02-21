@@ -1,0 +1,63 @@
+# Dockerfile.release — used by the CI release workflow only.
+# Skips Go compilation entirely: the pre-built binary is injected via the
+# build context (dist/youflac-server-<TARGETARCH>) so QEMU never compiles Go.
+
+FROM debian:bookworm-slim
+
+LABEL org.opencontainers.image.title="YouFlac"
+LABEL org.opencontainers.image.description="YouTube Video + FLAC Audio = Perfect MKV"
+LABEL org.opencontainers.image.source="https://github.com/kushiemoon-dev/YouFLAC"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    python3 \
+    python3-mutagen \
+    python3-websockets \
+    python3-brotli \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
+        -o /usr/local/bin/yt-dlp \
+    && chmod +x /usr/local/bin/yt-dlp
+
+RUN useradd -m -u 1000 youflac \
+    && mkdir -p /config /downloads /app \
+    && chown -R youflac:youflac /config /downloads /app
+
+WORKDIR /app
+
+# BuildKit sets TARGETARCH automatically (amd64, arm64).
+# The CI prepares dist/youflac-server-amd64 and dist/youflac-server-arm64.
+ARG TARGETARCH
+COPY dist/youflac-server-${TARGETARCH} ./youflac-server
+COPY dist/frontend/                    ./frontend/dist/
+
+RUN chmod +x ./youflac-server \
+    && chown -R youflac:youflac /app
+
+USER youflac
+
+ENV PORT=8080 \
+    OUTPUT_DIR=/downloads \
+    CONFIG_DIR=/config \
+    VIDEO_QUALITY=best \
+    CONCURRENT_DOWNLOADS=2 \
+    NAMING_TEMPLATE=jellyfin \
+    GENERATE_NFO=true \
+    EMBED_COVER_ART=true \
+    LYRICS_ENABLED=false \
+    LYRICS_EMBED_MODE=lrc \
+    THEME=dark \
+    ACCENT_COLOR=pink
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/api/health || exit 1
+
+VOLUME ["/config", "/downloads"]
+
+CMD ["./youflac-server"]
