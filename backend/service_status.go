@@ -48,7 +48,9 @@ func CheckServiceStatus(proxyURL string) map[string]ServiceStatus {
 		globalServiceCache.mu.RUnlock()
 
 		if ok && time.Since(cached.CheckedAt) < globalServiceCache.ttl {
+			mu.Lock()
 			result[name] = cached
+			mu.Unlock()
 			continue
 		}
 
