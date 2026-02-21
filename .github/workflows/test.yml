@@ -29,11 +29,7 @@ jobs:
       - run: |
           go test ./backend/... -short -timeout 120s -race \
             -covermode=atomic -coverprofile=coverage.out
-      - uses: codecov/codecov-action@v4
-        with:
-          file: ./coverage.out
-          flags: backend
-          token: ${{ secrets.CODECOV_TOKEN }}
+      - run: go tool cover -func=coverage.out
 
   test-frontend:
     runs-on: ubuntu-latest
